@@ -2,8 +2,8 @@ name: SNU Menu Alarm Bot
 
 on:
   schedule:
-    # 한국 시간(KST) 오전 10시 30분 = UTC 오전 1시 30분
-    - cron: '30 1 * * *'
+    # 한국 시간(KST) 오전 7시 00분 = UTC 전날 오후 10시 00분
+    - cron: '0 22 * * *'
   workflow_dispatch: # 언제든 수동으로 실행해볼 수 있는 버튼
 
 jobs:
