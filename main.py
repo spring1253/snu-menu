@@ -2,68 +2,74 @@ import os
 import requests
 import argparse
 import smtplib
+import time
 from bs4 import BeautifulSoup
 from email.message import EmailMessage
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 def get_snu_menu(target_date=None):
     if not target_date:
-        target_date = datetime.now().strftime('%Y-%m-%d')
+        kst = timezone(timedelta(hours=9))
+        target_date = datetime.now(kst).strftime('%Y-%m-%d')
     
     url = f"https://snuco.snu.ac.kr/foodmenu/?date={target_date}"
     
-    try:
-        response = requests.get(url, verify=False)
-        response.encoding = 'utf-8'
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 데이터를 담을 바구니 준비
-        lunch_results = []
-        dinner_results = []
-        
-        rows = soup.select("table tbody tr")
-        
-        for row in rows:
-            name_tag = row.select_one("td:nth-child(1)")
-            if not name_tag: continue
-            cafeteria_name = name_tag.get_text(strip=True)
+    for attempt in range(3):
+        try:
+            response = requests.get(url, verify=False, timeout=10)
+            response.encoding = 'utf-8'
+            soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 1. 점심 데이터 처리 (301동, 302동 공통)
-            if "301" in cafeteria_name or "302" in cafeteria_name:
-                raw_lunch = row.select_one("td:nth-child(3)").get_text("\n", strip=True)
-                if raw_lunch and "등록된" not in raw_lunch:
-                    # 301동만 <TAKE-OUT> 기준으로 자르기
-                    lunch_text = raw_lunch.split("<TAKE-OUT>")[0].strip() if "301" in cafeteria_name else raw_lunch.strip()
-                    lunch_results.append(f"📍 {cafeteria_name}\n{lunch_text}\n")
-
-            # 2. 저녁 데이터 처리 (302동 전용)
-            if "302" in cafeteria_name:
-                raw_dinner = row.select_one("td:nth-child(4)").get_text("\n", strip=True)
-                if raw_dinner and "등록된" not in raw_dinner:
-                    dinner_results.append(f"📍 {cafeteria_name}\n{raw_dinner.strip()}\n")
-
-        # 최종 결과물 조립
-        final_output = [f"📅 {target_date} 공대 식단 알림\n"]
-        
-        # 점심 섹션
-        if lunch_results:
-            final_output.append("☀️ [점심 메뉴]")
-            final_output.extend(lunch_results)
-            final_output.append("-" * 20)
+            # 데이터를 담을 바구니 준비
+            lunch_results = []
+            dinner_results = []
             
-        # 저녁 섹션
-        if dinner_results:
-            final_output.append("🌙 [저녁 메뉴]")
-            final_output.extend(dinner_results)
-            final_output.append("-" * 20)
-
-        if not lunch_results and not dinner_results:
-            return f"{target_date}에 운영하는 식당이 없습니다."
+            rows = soup.select("table tbody tr")
             
-        return "\n".join(final_output)
+            for row in rows:
+                name_tag = row.select_one("td:nth-child(1)")
+                if not name_tag: continue
+                cafeteria_name = name_tag.get_text(strip=True)
+                
+                # 1. 점심 데이터 처리 (301동, 302동 공통)
+                if "301" in cafeteria_name or "302" in cafeteria_name:
+                    raw_lunch = row.select_one("td:nth-child(3)").get_text("\n", strip=True)
+                    if raw_lunch and "등록된" not in raw_lunch:
+                        # 301동만 <TAKE-OUT> 기준으로 자르기
+                        lunch_text = raw_lunch.split("<TAKE-OUT>")[0].strip() if "301" in cafeteria_name else raw_lunch.strip()
+                        lunch_results.append(f"📍 {cafeteria_name}\n{lunch_text}\n")
 
-    except Exception as e:
-        return f"크롤링 중 오류 발생: {e}"
+                # 2. 저녁 데이터 처리 (302동 전용)
+                if "302" in cafeteria_name:
+                    raw_dinner = row.select_one("td:nth-child(4)").get_text("\n", strip=True)
+                    if raw_dinner and "등록된" not in raw_dinner:
+                        dinner_results.append(f"📍 {cafeteria_name}\n{raw_dinner.strip()}\n")
+
+            # 최종 결과물 조립
+            final_output = [f"📅 {target_date} 공대 식단 알림\n"]
+            
+            # 점심 섹션
+            if lunch_results:
+                final_output.append("☀️ [점심 메뉴]")
+                final_output.extend(lunch_results)
+                final_output.append("-" * 20)
+                
+            # 저녁 섹션
+            if dinner_results:
+                final_output.append("🌙 [저녁 메뉴]")
+                final_output.extend(dinner_results)
+                final_output.append("-" * 20)
+
+            if not lunch_results and not dinner_results:
+                return f"{target_date}에 운영하는 식당이 없습니다."
+                
+            return "\n".join(final_output)
+
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(5)
+                continue
+            return f"크롤링 중 오류 발생: {e}"
 
 def send_email(content, date_str):
     email_user = os.environ.get('EMAIL_USER')
