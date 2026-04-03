@@ -96,11 +96,17 @@ if __name__ == "__main__":
     menu_info = get_snu_menu(args.date)
     print(menu_info)
     
-    # 3. 메일 발송 조건 (환경변수가 있고, '운영하는 식당이 없습니다'가 아닐 때만)
+    # 3. 메일 발송 조건
     if os.environ.get('EMAIL_USER'):
-        # 결과 메시지에 '없습니다'가 포함되어 있지 않을 때만 발송
         if "없습니다" not in menu_info:
-            display_date = args.date if args.date else datetime.now().strftime('%m/%d')
+            # 💡 여기를 수정합니다! 
+            # 인자가 없으면 '한국 시간' 기준으로 오늘 날짜를 가져오도록 합니다.
+            if args.date:
+                display_date = args.date
+            else:
+                kst = timezone(timedelta(hours=9))
+                display_date = datetime.now(kst).strftime('%m/%d')
+                
             send_email(menu_info, display_date)
             print("이메일 발송 완료!")
         else:
